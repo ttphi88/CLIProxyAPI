@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -11,6 +13,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/pluginhost"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/api/handlers"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
+	log "github.com/sirupsen/logrus"
 )
 
 type serverOptionConfig struct {
@@ -33,6 +36,14 @@ type serverOptionConfig struct {
 type ServerOption func(*serverOptionConfig)
 
 func defaultRequestLoggerFactory(cfg *config.Config, configPath string) logging.RequestLogger {
+	// CPA_REQUEST_LOG_DB replaces the per-request log files with one SQLite database.
+	if dbPath := strings.TrimSpace(os.Getenv("CPA_REQUEST_LOG_DB")); dbPath != "" {
+		dbLogger, err := logging.NewSQLiteRequestLogger(dbPath)
+		if err == nil {
+			return dbLogger
+		}
+		log.Errorf("request log: %v; falling back to file request logging", err)
+	}
 	configDir := filepath.Dir(configPath)
 	logsDir := logging.ResolveLogDirectory(cfg)
 	logger := logging.NewFileRequestLogger(cfg.RequestLog, logsDir, configDir, cfg.ErrorLogsMaxFiles)
