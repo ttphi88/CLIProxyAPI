@@ -62,3 +62,15 @@ go build -o test-output ./cmd/server && rm test-output # Verify compile (REQUIRE
 - Avoid wall-clock `time.Sleep` in TTL, expiration, ordering, or cache-eviction unit tests due to platform timer granularity (e.g. Windows default timer resolution of ~15.6ms) and CI jitter under load; prefer controllable clocks (`nowFunc` / mock clock), explicit timestamp manipulation, or deterministic synchronization primitives.
 - Note: if modifying features that involve CLIProxyAPIHome, check if corresponding updates are needed in the CLIProxyAPIHome repository.
 - Endpoints under the `/v0/management` base URL are deprecated and no longer maintained. For any feature changes, do not modify endpoints under `/v0/management` unless necessary to fix compilation errors.
+
+## Phi's fork (`custom` branch)
+
+This checkout is Phi's fork `github.com/ttphi88/CLIProxyAPI` (remote `origin`); upstream `router-for-me/CLIProxyAPI` is the remote `upstream`. `main` tracks `upstream/main` and gets no fork commits. Phi's commits live on `custom` (prefix `local:`): the SQLite request log (`internal/reqlogdb/`, `internal/logging/request_logger_sqlite.go`, `cmd/reqlog/`; how it works: `cmd/reqlog/README.md`) and `scripts/custom-update.sh`.
+
+- Rebase `custom`, never merge. Keep it linear on top of an upstream release tag; never merge `upstream/main`, `main` or a tag into it.
+- Update for a new upstream release with `scripts/custom-update.sh` (optionally a tag argument). It rebases `custom` onto the newest `v*` tag with git rerere, runs the tests in a `golang:1.26` container, builds the image `localhost/cli-proxy-api:custom-<tag>-<commit>`, saves it to `/srv/cpa-images/` when that folder is writable (zbook), and pushes with `--force-with-lease`. `--no-rebase` builds the checkout as is; `--no-push` skips the push.
+- On a rebase conflict rerere hasn't seen, the script stops and lists the files: fix them, `git add` them, `git rebase --continue`, then run the script again.
+- Because `custom` is rewritten on each update, update another checkout with `git fetch origin && git reset --hard origin/custom`, after checking that `git status` and `git log origin/custom..custom` show nothing that would be lost.
+- Keep upstream files close to upstream: put fork code in new files, and keep edits to upstream files to a few lines so rebases stay easy.
+- Tests without the script: `go test ./internal/reqlogdb/ ./internal/logging/ ./internal/api/...` and `go build ./cmd/...`. The SQLite driver needs CGO (`CGO_ENABLED=1`, a C compiler). The image also contains `/usr/local/bin/reqlog`.
+- Deployment (Phi's zbook) loads the saved image as user `phi` and runs the stack in Phi's `cliproxy` repo; agents in this repo don't deploy. Never commit configs, auth files, request-log databases or `.bench/`.
